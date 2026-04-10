@@ -43,6 +43,8 @@ next-env.d.ts
 local-*
 .claude
 .z-ai-config
+CLAUDE.md
+AGENTS.md
 *.log
 dev.log
 dev.out.log
@@ -52,3 +54,21 @@ prompt
 server.log
 # Skills directory
 /skills/
+
+# Analysis & template reference (not part of the app)
+/drpools-analysis/
+/template-analysis/
+
+# Upload & download local folders
+/upload/
+/download/
+
+# Worklog
+/worklog.md
+
+# Z-ai internal scripts
+/.zscripts/
+/Caddyfile
+/examples/
+/public/logo.svg
+/public/robots.txt
