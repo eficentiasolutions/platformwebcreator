@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React from 'react';
 import Link from 'next/link';
 import {
   Users,
@@ -15,20 +15,15 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/status-badge';
 import AppShell from '@/components/app-shell';
-import { getClients, getActivePartner } from '@/lib/storage';
+import { fetchClients, fetchSettings } from '@/lib/api';
 import { Client, ClientStatus } from '@/types';
 import { cn } from '@/lib/utils';
+import { useQuery } from '@tanstack/react-query';
 
 export default function DashboardPage() {
-  const [clients] = useState<Client[]>(() => {
-    if (typeof window === 'undefined') return [];
-    return getClients();
-  });
-  const [activePartnerName] = useState<string | null>(() => {
-    if (typeof window === 'undefined') return null;
-    const p = getActivePartner();
-    return p?.name ?? null;
-  });
+  const { data: clients = [] } = useQuery({ queryKey: ['clients'], queryFn: fetchClients });
+  const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: fetchSettings });
+  const activePartnerName = settings?.activePartnerId || null;
 
   const total = clients.length;
   const published = clients.filter((c) => c.status === 'published').length;

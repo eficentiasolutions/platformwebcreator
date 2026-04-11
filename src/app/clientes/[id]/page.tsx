@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useState, use } from 'react';
 import Link from 'next/link';
 import {
   ArrowLeft,
@@ -29,8 +29,10 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { StatusBadge } from '@/components/status-badge';
 import AppShell from '@/components/app-shell';
-import { getClient, saveClient, getSEOProgress } from '@/lib/storage';
+import { fetchClient, updateClient, updateClientSEO } from '@/lib/api';
+import { getSEOProgress } from '@/lib/utils';
 import { Client, SEOChecklist, SEO_CHECKLIST_ITEMS } from '@/types';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 export default function ClientDetailPage({
   params,
@@ -38,13 +40,39 @@ export default function ClientDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
-  const [client, setClient] = useState<Client | null>(() => {
-    if (typeof window === 'undefined') return null;
-    return getClient(id);
+  const queryClient = useQueryClient();
+  const { data: client, isLoading } = useQuery({
+    queryKey: ['clients', id],
+    queryFn: () => fetchClient(id),
   });
-  const initialized = useRef(true);
-  const [notes, setNotes] = useState(client?.notes || '');
+  const [notes, setNotes] = useState('');
   const [notesSaved, setNotesSaved] = useState(false);
+
+  const saveNotesMutation = useMutation({
+    mutationFn: (notesValue: string) => updateClient(id, { notes: notesValue }),
+    onSuccess: () => {
+      setNotesSaved(true);
+      setTimeout(() => setNotesSaved(false), 2000);
+      queryClient.invalidateQueries({ queryKey: ['clients', id] });
+    },
+  });
+
+  const toggleCheckMutation = useMutation({
+    mutationFn: (key: keyof SEOChecklist) => updateClientSEO(id, { [key]: !client!.seoChecklist[key] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['clients', id] });
+    },
+  });
+
+  if (isLoading) {
+    return (
+      <AppShell>
+        <div className="flex items-center justify-center py-20">
+          <p className="text-slate-500">Cargando...</p>
+        </div>
+      </AppShell>
+    );
+  }
 
   if (!client) {
     return (
@@ -64,18 +92,11 @@ export default function ClientDetailPage({
   const completedChecks = Object.values(client.seoChecklist).filter(Boolean).length;
 
   const handleSaveNotes = () => {
-    saveClient({ ...client, notes });
-    setNotesSaved(true);
-    setTimeout(() => setNotesSaved(false), 2000);
+    saveNotesMutation.mutate(notes);
   };
 
   const handleToggleCheck = (key: keyof SEOChecklist) => {
-    const updated = {
-      ...client,
-      seoChecklist: { ...client.seoChecklist, [key]: !client.seoChecklist[key] },
-    };
-    saveClient(updated);
-    setClient(updated);
+    toggleCheckMutation.mutate(key);
   };
 
   const infoItems = [

@@ -26,26 +26,30 @@ import {
 } from '@/components/ui/dialog';
 import { StatusBadge } from '@/components/status-badge';
 import AppShell from '@/components/app-shell';
-import { getClients, deleteClient, getActivePartner } from '@/lib/storage';
+import { fetchClients, deleteClientAPI, fetchSettings } from '@/lib/api';
 import { Client, ClientStatus, STATUS_LABELS } from '@/types';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 const ALL_STATUSES: ClientStatus[] = [
   'new', 'configuring', 'seo_setup', 'branding', 'content', 'review', 'published', 'maintenance',
 ];
 
 export default function ClientesPage() {
-  const [clients, setClients] = useState<Client[]>(() => {
-    if (typeof window === 'undefined') return [];
-    return getClients();
-  });
+  const queryClient = useQueryClient();
+  const { data: clients = [] } = useQuery({ queryKey: ['clients'], queryFn: fetchClients });
+  const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: fetchSettings });
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [clientToDelete, setClientToDelete] = useState<Client | null>(null);
-  const [activePartnerName] = useState<string | null>(() => {
-    if (typeof window === 'undefined') return null;
-    const p = getActivePartner();
-    return p?.name ?? null;
+
+  const activePartnerName = settings?.activePartnerId || null;
+
+  const deleteMutation = useMutation({
+    mutationFn: deleteClientAPI,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['clients'] });
+    },
   });
 
   const filteredClients = clients.filter((client) => {
@@ -58,10 +62,9 @@ export default function ClientesPage() {
     return matchesSearch && matchesStatus;
   });
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!clientToDelete) return;
-    deleteClient(clientToDelete.id);
-    setClients(getClients());
+    await deleteMutation.mutateAsync(clientToDelete.id);
     setDeleteDialogOpen(false);
     setClientToDelete(null);
   };

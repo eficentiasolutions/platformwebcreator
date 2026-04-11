@@ -30,8 +30,9 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import AppShell from '@/components/app-shell';
-import { getClient, saveClient } from '@/lib/storage';
+import { fetchClient, updateClient } from '@/lib/api';
 import { Client, ClientStatus, STATUS_LABELS, ServiceItem } from '@/types';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 export default function EditarClientePage({
   params,
@@ -39,13 +40,33 @@ export default function EditarClientePage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
-  const [client, setClient] = useState<Client | null>(() => {
-    if (typeof window === 'undefined') return null;
-    return getClient(id);
+  const queryClient = useQueryClient();
+  const { data: client, isLoading } = useQuery({
+    queryKey: ['clients', id],
+    queryFn: () => fetchClient(id),
   });
   const [saved, setSaved] = useState(false);
   const [newZone, setNewZone] = useState('');
   const [serviceInputs, setServiceInputs] = useState<Record<number, string>>({});
+
+  const saveMutation = useMutation({
+    mutationFn: (data: Partial<Client>) => updateClient(id, data),
+    onSuccess: () => {
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+      queryClient.invalidateQueries({ queryKey: ['clients', id] });
+    },
+  });
+
+  if (isLoading) {
+    return (
+      <AppShell>
+        <div className="flex items-center justify-center py-20">
+          <p className="text-slate-500">Cargando...</p>
+        </div>
+      </AppShell>
+    );
+  }
 
   if (!client) {
     return (
@@ -60,20 +81,20 @@ export default function EditarClientePage({
     );
   }
 
+  const [localClient, setLocalClient] = useState<Client>(client);
+
   const updateField = (field: keyof Client, value: string) => {
-    setClient((prev) => (prev ? { ...prev, [field]: value } : prev));
+    setLocalClient((prev) => (prev ? { ...prev, [field]: value } : prev));
   };
 
   const updateSocialLink = (platform: string, value: string) => {
-    if (!client) return;
-    setClient({
-      ...client,
-      socialLinks: { ...client.socialLinks, [platform]: value || undefined },
+    setLocalClient({
+      ...localClient,
+      socialLinks: { ...localClient.socialLinks, [platform]: value || undefined },
     });
   };
 
   const addService = () => {
-    if (!client) return;
     const newService: ServiceItem = {
       name: '',
       slug: '',
@@ -81,58 +102,51 @@ export default function EditarClientePage({
       keywords: [],
       bullets: [],
     };
-    setClient({ ...client, services: [...client.services, newService] });
+    setLocalClient({ ...localClient, services: [...localClient.services, newService] });
   };
 
   const updateService = (index: number, field: keyof ServiceItem, value: string | string[]) => {
-    if (!client) return;
-    const services = [...client.services];
+    const services = [...localClient.services];
     services[index] = { ...services[index], [field]: value };
-    setClient({ ...client, services });
+    setLocalClient({ ...localClient, services });
   };
 
   const removeService = (index: number) => {
-    if (!client) return;
-    setClient({
-      ...client,
-      services: client.services.filter((_, i) => i !== index),
+    setLocalClient({
+      ...localClient,
+      services: localClient.services.filter((_, i) => i !== index),
     });
   };
 
   const addBullet = (sIdx: number, value: string) => {
-    if (!client || !value.trim()) return;
-    const services = [...client.services];
+    if (!value.trim()) return;
+    const services = [...localClient.services];
     const service = { ...services[sIdx] };
     service.bullets = [...(service.bullets || []), value.trim()];
     services[sIdx] = service;
-    setClient({ ...client, services });
+    setLocalClient({ ...localClient, services });
   };
 
   const removeBullet = (sIdx: number, bIdx: number) => {
-    if (!client) return;
-    const services = [...client.services];
+    const services = [...localClient.services];
     const service = { ...services[sIdx] };
     service.bullets = (service.bullets || []).filter((_, i) => i !== bIdx);
     services[sIdx] = service;
-    setClient({ ...client, services });
+    setLocalClient({ ...localClient, services });
   };
 
   const addZone = () => {
-    if (!client || !newZone.trim()) return;
-    setClient({ ...client, zones: [...client.zones, newZone.trim()] });
+    if (!newZone.trim()) return;
+    setLocalClient({ ...localClient, zones: [...localClient.zones, newZone.trim()] });
     setNewZone('');
   };
 
   const removeZone = (index: number) => {
-    if (!client) return;
-    setClient({ ...client, zones: client.zones.filter((_, i) => i !== index) });
+    setLocalClient({ ...localClient, zones: localClient.zones.filter((_, i) => i !== index) });
   };
 
   const handleSave = () => {
-    if (!client) return;
-    saveClient({ ...client, updatedAt: new Date().toISOString() });
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    saveMutation.mutate({ ...localClient, updatedAt: new Date().toISOString() });
   };
 
   return (
@@ -157,40 +171,40 @@ export default function EditarClientePage({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Nombre del Negocio</Label>
-                <Input value={client.businessName} onChange={(e) => updateField('businessName', e.target.value)} />
+                <Input value={localClient.businessName} onChange={(e) => updateField('businessName', e.target.value)} />
               </div>
               <div className="space-y-2">
                 <Label>Nombre del Contacto</Label>
-                <Input value={client.contactName} onChange={(e) => updateField('contactName', e.target.value)} />
+                <Input value={localClient.contactName} onChange={(e) => updateField('contactName', e.target.value)} />
               </div>
               <div className="space-y-2">
                 <Label>Email</Label>
-                <Input value={client.email} onChange={(e) => updateField('email', e.target.value)} />
+                <Input value={localClient.email} onChange={(e) => updateField('email', e.target.value)} />
               </div>
               <div className="space-y-2">
                 <Label>Telefono</Label>
-                <Input value={client.phone} onChange={(e) => updateField('phone', e.target.value)} />
+                <Input value={localClient.phone} onChange={(e) => updateField('phone', e.target.value)} />
               </div>
               <div className="space-y-2">
                 <Label>Ciudad</Label>
-                <Input value={client.location} onChange={(e) => updateField('location', e.target.value)} />
+                <Input value={localClient.location} onChange={(e) => updateField('location', e.target.value)} />
               </div>
               <div className="space-y-2">
                 <Label>Provincia</Label>
-                <Input value={client.province} onChange={(e) => updateField('province', e.target.value)} />
+                <Input value={localClient.province} onChange={(e) => updateField('province', e.target.value)} />
               </div>
               <div className="space-y-2">
                 <Label>Dominio</Label>
-                <Input value={client.domain} onChange={(e) => updateField('domain', e.target.value)} />
+                <Input value={localClient.domain} onChange={(e) => updateField('domain', e.target.value)} />
               </div>
               <div className="space-y-2">
                 <Label>Tipo de Negocio</Label>
-                <Input value={client.businessType} onChange={(e) => updateField('businessType', e.target.value)} />
+                <Input value={localClient.businessType} onChange={(e) => updateField('businessType', e.target.value)} />
               </div>
             </div>
             <div className="space-y-2">
               <Label>Estado</Label>
-              <Select value={client.status} onValueChange={(v) => updateField('status', v)}>
+              <Select value={localClient.status} onValueChange={(v) => updateField('status', v)}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -221,11 +235,11 @@ export default function EditarClientePage({
                 <div className="flex items-center gap-3">
                   <input
                     type="color"
-                    value={client.brandPrimaryColor}
+                    value={localClient.brandPrimaryColor}
                     onChange={(e) => updateField('brandPrimaryColor', e.target.value)}
                     className="w-12 h-12 rounded-lg border-2 border-slate-200 cursor-pointer p-1"
                   />
-                  <Input value={client.brandPrimaryColor} onChange={(e) => updateField('brandPrimaryColor', e.target.value)} className="flex-1 font-mono" />
+                  <Input value={localClient.brandPrimaryColor} onChange={(e) => updateField('brandPrimaryColor', e.target.value)} className="flex-1 font-mono" />
                 </div>
               </div>
               <div className="space-y-2">
@@ -233,11 +247,11 @@ export default function EditarClientePage({
                 <div className="flex items-center gap-3">
                   <input
                     type="color"
-                    value={client.brandSecondaryColor}
+                    value={localClient.brandSecondaryColor}
                     onChange={(e) => updateField('brandSecondaryColor', e.target.value)}
                     className="w-12 h-12 rounded-lg border-2 border-slate-200 cursor-pointer p-1"
                   />
-                  <Input value={client.brandSecondaryColor} onChange={(e) => updateField('brandSecondaryColor', e.target.value)} className="flex-1 font-mono" />
+                  <Input value={localClient.brandSecondaryColor} onChange={(e) => updateField('brandSecondaryColor', e.target.value)} className="flex-1 font-mono" />
                 </div>
               </div>
               <div className="space-y-2">
@@ -245,22 +259,22 @@ export default function EditarClientePage({
                 <div className="flex items-center gap-3">
                   <input
                     type="color"
-                    value={client.brandAccentColor}
+                    value={localClient.brandAccentColor}
                     onChange={(e) => updateField('brandAccentColor', e.target.value)}
                     className="w-12 h-12 rounded-lg border-2 border-slate-200 cursor-pointer p-1"
                   />
-                  <Input value={client.brandAccentColor} onChange={(e) => updateField('brandAccentColor', e.target.value)} className="flex-1 font-mono" />
+                  <Input value={localClient.brandAccentColor} onChange={(e) => updateField('brandAccentColor', e.target.value)} className="flex-1 font-mono" />
                 </div>
               </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>URL del Logo</Label>
-                <Input value={client.logoUrl} onChange={(e) => updateField('logoUrl', e.target.value)} />
+                <Input value={localClient.logoUrl} onChange={(e) => updateField('logoUrl', e.target.value)} />
               </div>
               <div className="space-y-2">
                 <Label>URL de Imagen Hero</Label>
-                <Input value={client.heroImageUrl} onChange={(e) => updateField('heroImageUrl', e.target.value)} />
+                <Input value={localClient.heroImageUrl} onChange={(e) => updateField('heroImageUrl', e.target.value)} />
               </div>
             </div>
           </CardContent>
@@ -278,19 +292,19 @@ export default function EditarClientePage({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Facebook</Label>
-                <Input value={client.socialLinks.facebook || ''} onChange={(e) => updateSocialLink('facebook', e.target.value)} />
+                <Input value={localClient.socialLinks.facebook || ''} onChange={(e) => updateSocialLink('facebook', e.target.value)} />
               </div>
               <div className="space-y-2">
                 <Label>Instagram</Label>
-                <Input value={client.socialLinks.instagram || ''} onChange={(e) => updateSocialLink('instagram', e.target.value)} />
+                <Input value={localClient.socialLinks.instagram || ''} onChange={(e) => updateSocialLink('instagram', e.target.value)} />
               </div>
               <div className="space-y-2">
                 <Label>TikTok</Label>
-                <Input value={client.socialLinks.tiktok || ''} onChange={(e) => updateSocialLink('tiktok', e.target.value)} />
+                <Input value={localClient.socialLinks.tiktok || ''} onChange={(e) => updateSocialLink('tiktok', e.target.value)} />
               </div>
               <div className="space-y-2">
                 <Label>Google Maps</Label>
-                <Input value={client.socialLinks.googleMaps || ''} onChange={(e) => updateSocialLink('googleMaps', e.target.value)} />
+                <Input value={localClient.socialLinks.googleMaps || ''} onChange={(e) => updateSocialLink('googleMaps', e.target.value)} />
               </div>
             </div>
           </CardContent>
@@ -307,26 +321,26 @@ export default function EditarClientePage({
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <Label>Titulo SEO</Label>
-              <Input value={client.seoTitle} onChange={(e) => updateField('seoTitle', e.target.value)} />
-              <p className="text-xs text-slate-500">{client.seoTitle.length}/60 caracteres</p>
+              <Input value={localClient.seoTitle} onChange={(e) => updateField('seoTitle', e.target.value)} />
+              <p className="text-xs text-slate-500">{localClient.seoTitle.length}/60 caracteres</p>
             </div>
             <div className="space-y-2">
               <Label>Meta Description</Label>
-              <Textarea value={client.seoDescription} onChange={(e) => updateField('seoDescription', e.target.value)} rows={3} />
-              <p className="text-xs text-slate-500">{client.seoDescription.length}/160 caracteres</p>
+              <Textarea value={localClient.seoDescription} onChange={(e) => updateField('seoDescription', e.target.value)} rows={3} />
+              <p className="text-xs text-slate-500">{localClient.seoDescription.length}/160 caracteres</p>
             </div>
             <div className="space-y-2">
               <Label>Keywords (separadas por coma)</Label>
-              <Textarea value={client.seoKeywords.join(', ')} onChange={(e) => updateField('seoKeywords', e.target.value)} rows={2} />
+              <Textarea value={localClient.seoKeywords.join(', ')} onChange={(e) => updateField('seoKeywords', e.target.value)} rows={2} />
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Google Site Verification</Label>
-                <Input value={client.googleSiteVerification} onChange={(e) => updateField('googleSiteVerification', e.target.value)} />
+                <Input value={localClient.googleSiteVerification} onChange={(e) => updateField('googleSiteVerification', e.target.value)} />
               </div>
               <div className="space-y-2">
                 <Label>GA4 ID</Label>
-                <Input value={client.gAnalyticsId} onChange={(e) => updateField('gAnalyticsId', e.target.value)} />
+                <Input value={localClient.gAnalyticsId} onChange={(e) => updateField('gAnalyticsId', e.target.value)} />
               </div>
             </div>
           </CardContent>
@@ -346,7 +360,7 @@ export default function EditarClientePage({
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
-            {client.services.map((service, sIdx) => (
+            {localClient.services.map((service, sIdx) => (
               <div key={sIdx} className="border border-slate-200 rounded-lg p-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-semibold">Servicio {sIdx + 1}</span>
@@ -420,7 +434,7 @@ export default function EditarClientePage({
               <Button size="sm" variant="outline" onClick={addZone}><Plus className="h-4 w-4" /></Button>
             </div>
             <div className="flex flex-wrap gap-2">
-              {client.zones.map((zone, zIdx) => (
+              {localClient.zones.map((zone, zIdx) => (
                 <Badge key={zIdx} variant="secondary" className="py-1.5 px-3 gap-1">
                   {zone}
                   <button onClick={() => removeZone(zIdx)}><X className="h-3 w-3" /></button>

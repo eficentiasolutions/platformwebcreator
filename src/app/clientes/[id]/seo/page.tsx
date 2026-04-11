@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, use } from 'react';
 import Link from 'next/link';
 import {
   ArrowLeft,
@@ -27,8 +27,10 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import AppShell from '@/components/app-shell';
-import { getClient, saveClient, getSEOProgress } from '@/lib/storage';
+import { fetchClient, updateClientSEO } from '@/lib/api';
+import { getSEOProgress } from '@/lib/utils';
 import { Client, SEO_CHECKLIST_ITEMS, SEOChecklist } from '@/types';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 const ICON_MAP: Record<string, React.ElementType> = {
   Settings,
@@ -45,11 +47,44 @@ export default function SEOChecklistPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
-  const [client, setClient] = useState<Client | null>(() => {
-    if (typeof window === 'undefined') return null;
-    return getClient(id);
+  const queryClient = useQueryClient();
+  const { data: client, isLoading } = useQuery({
+    queryKey: ['clients', id],
+    queryFn: () => fetchClient(id),
   });
-  const [saved, setSaved] = useState(false);
+
+  const toggleMutation = useMutation({
+    mutationFn: (key: keyof SEOChecklist) => updateClientSEO(id, { [key]: !client!.seoChecklist[key] }),
+    onMutate: async (key) => {
+      await queryClient.cancelQueries({ queryKey: ['clients', id] });
+      const previous = queryClient.getQueryData<Client>(['clients', id]);
+      if (previous) {
+        queryClient.setQueryData<Client>(['clients', id], {
+          ...previous,
+          seoChecklist: { ...previous.seoChecklist, [key]: !previous.seoChecklist[key] },
+        });
+      }
+      return { previous };
+    },
+    onError: (_err, _key, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(['clients', id], context.previous);
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['clients', id] });
+    },
+  });
+
+  if (isLoading) {
+    return (
+      <AppShell>
+        <div className="flex items-center justify-center py-20">
+          <p className="text-slate-500">Cargando...</p>
+        </div>
+      </AppShell>
+    );
+  }
 
   if (!client) {
     return (
@@ -69,18 +104,7 @@ export default function SEOChecklistPage({
   const completedChecks = Object.values(client.seoChecklist).filter(Boolean).length;
 
   const handleToggle = (key: keyof SEOChecklist) => {
-    const updated = {
-      ...client,
-      seoChecklist: { ...client.seoChecklist, [key]: !client.seoChecklist[key] },
-    };
-    setClient(updated);
-    saveClient(updated);
-  };
-
-  const handleSave = () => {
-    saveClient(client);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    toggleMutation.mutate(key);
   };
 
   return (
@@ -170,13 +194,6 @@ export default function SEOChecklistPage({
                 </Card>
               );
             })}
-          </div>
-
-          <div className="flex justify-end pb-8">
-            <Button onClick={handleSave} className="bg-cyan-600 hover:bg-cyan-700 gap-2 px-8">
-              <Save className="h-4 w-4" /> Guardar Progreso
-              {saved && <span className="ml-2 text-emerald-300">✓</span>}
-            </Button>
           </div>
         </div>
       </TooltipProvider>

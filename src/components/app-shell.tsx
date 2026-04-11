@@ -3,12 +3,6 @@
 import React from 'react';
 import { AppSidebar } from '@/components/app-sidebar';
 import { PageHeader } from '@/components/page-header';
-import { initializeStorage } from '@/lib/storage';
-
-// Initialize storage once when module loads (client-side only)
-if (typeof window !== 'undefined') {
-  initializeStorage();
-}
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   return (

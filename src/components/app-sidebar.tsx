@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useCallback } from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -13,7 +13,8 @@ import {
   Menu,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { getActivePartner } from '@/lib/storage';
+import { fetchSettings, fetchPartners } from '@/lib/api';
+import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -84,11 +85,9 @@ function CollapsedNav({ pathname }: { pathname: string }) {
 
 export function AppSidebar() {
   const pathname = usePathname();
-  const [activePartnerName] = useState<string | null>(() => {
-    if (typeof window === 'undefined') return null;
-    const partner = getActivePartner();
-    return partner?.name ?? null;
-  });
+  const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: fetchSettings });
+  const { data: partners = [] } = useQuery({ queryKey: ['partners'], queryFn: fetchPartners });
+  const activePartnerName = partners.find((p) => p.id === settings?.activePartnerId)?.name ?? null;
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 

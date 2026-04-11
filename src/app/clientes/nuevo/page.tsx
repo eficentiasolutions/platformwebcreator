@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { Suspense, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   ArrowLeft,
   Save,
@@ -24,13 +24,14 @@ import { Textarea } from '@/components/ui/textarea';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import AppShell from '@/components/app-shell';
-import { saveClient, generateId, getActivePartner } from '@/lib/storage';
+import { createClient, fetchSettings } from '@/lib/api';
 import {
   Client,
   ServiceItem,
   EMPTY_SEO_CHECKLIST,
   SEO_CHECKLIST_ITEMS,
 } from '@/types';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 const STEPS = [
   { title: 'Datos del Alumno', icon: UserPlus },
@@ -74,16 +75,26 @@ const initialFormData: FormData = {
   googleSiteVerification: '', gAnalyticsId: '', status: 'new',
 };
 
-export default function NuevoClientePage() {
+function NuevoClienteContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const queryClient = useQueryClient();
   const [step, setStep] = useState(0);
   const [formData, setFormData] = useState<FormData>(initialFormData);
   const [newZone, setNewZone] = useState('');
   const [newKeyword, setNewKeyword] = useState('');
-  const [partnerInfo] = useState<{ id: string; name: string } | null>(() => {
-    if (typeof window === 'undefined') return null;
-    const partner = getActivePartner();
-    return partner ? { id: partner.id, name: partner.name } : null;
+
+  const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: fetchSettings });
+
+  const partnerId = searchParams.get('partnerId') || '';
+  const partnerInfo = settings?.activePartnerId ? { id: settings.activePartnerId, name: '' } : null;
+
+  const createMutation = useMutation({
+    mutationFn: createClient,
+    onSuccess: (newClient) => {
+      queryClient.invalidateQueries({ queryKey: ['clients'] });
+      router.push(`/clientes/${newClient.id}`);
+    },
   });
 
   const updateField = (field: keyof FormData, value: string) => {
@@ -142,10 +153,8 @@ export default function NuevoClientePage() {
   };
 
   const handleSubmit = () => {
-    const client: Client = {
-      id: generateId(),
-      partnerId: partnerInfo?.id || '',
-      partnerName: partnerInfo?.name || '',
+    const client: Omit<Client, 'id' | 'createdAt' | 'updatedAt' | 'partnerName'> = {
+      partnerId: partnerInfo?.id || partnerId,
       businessName: formData.businessName,
       contactName: formData.contactName,
       email: formData.email,
@@ -172,12 +181,9 @@ export default function NuevoClientePage() {
       onboardingStep: 4,
       onboardingCompleted: true,
       seoChecklist: { ...EMPTY_SEO_CHECKLIST },
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
       notes: formData.notes,
     };
-    saveClient(client);
-    router.push(`/clientes/${client.id}`);
+    createMutation.mutate(client);
   };
 
   const canProceed = () => {
@@ -428,5 +434,13 @@ export default function NuevoClientePage() {
         )}
       </div>
     </AppShell>
+  );
+}
+
+export default function NuevoClientePage() {
+  return (
+    <Suspense fallback={<AppShell><div className="flex items-center justify-center py-20"><p className="text-slate-500">Cargando...</p></div></AppShell>}>
+      <NuevoClienteContent />
+    </Suspense>
   );
 }
