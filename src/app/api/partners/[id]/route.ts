@@ -16,7 +16,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   const body = await req.json();
   const partner = await db.partner.update({
     where: { id },
-    data: { name: body.name, templateType: body.templateType, description: body.description, active: body.active },
+    data: { name: body.name, templateType: body.templateType, templateRepo: body.templateRepo, description: body.description, active: body.active },
   });
   return NextResponse.json(partner);
 }

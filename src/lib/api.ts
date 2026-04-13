@@ -56,7 +56,7 @@ export function fetchPartners(): Promise<Partner[]> {
   return fetchJSON<Partner[]>('/partners');
 }
 
-export function createPartner(data: { name: string; templateType?: string; description?: string }): Promise<Partner> {
+export function createPartner(data: { name: string; templateType?: string; templateRepo?: string; description?: string }): Promise<Partner> {
   return fetchJSON<Partner>('/partners', {
     method: 'POST',
     body: JSON.stringify(data),

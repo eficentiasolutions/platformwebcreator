@@ -13,6 +13,7 @@ model Partner {
   id           String    @id @default(cuid())
   name         String
   templateType String    @default("generic")
+  templateRepo String    @default("")
   description  String?
   active       Boolean   @default(false)
   createdAt    DateTime  @default(now())

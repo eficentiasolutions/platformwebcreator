@@ -17,7 +17,7 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   const body = await req.json();
   const partner = await db.partner.create({
-    data: { name: body.name, templateType: body.templateType ?? 'generic', description: body.description },
+    data: { name: body.name, templateType: body.templateType ?? 'generic', templateRepo: body.templateRepo ?? '', description: body.description },
   });
   return NextResponse.json(partner, { status: 201 });
 }

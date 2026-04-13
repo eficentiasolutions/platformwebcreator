@@ -36,7 +36,7 @@ const ALL_STATUSES: ClientStatus[] = [
 
 export default function ClientesPage() {
   const queryClient = useQueryClient();
-  const { data: clients = [] } = useQuery({ queryKey: ['clients'], queryFn: fetchClients });
+  const { data: clients = [], isLoading: clientsLoading } = useQuery({ queryKey: ['clients'], queryFn: fetchClients });
   const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: fetchSettings });
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -72,6 +72,9 @@ export default function ClientesPage() {
   return (
     <AppShell>
       <div className="space-y-6">
+        {clientsLoading && (
+          <Card><CardContent className="py-12 text-center text-slate-400">Cargando clientes...</CardContent></Card>
+        )}
         <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
           <div>
             {activePartnerName && (

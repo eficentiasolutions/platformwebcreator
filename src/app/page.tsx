@@ -21,7 +21,7 @@ import { cn } from '@/lib/utils';
 import { useQuery } from '@tanstack/react-query';
 
 export default function DashboardPage() {
-  const { data: clients = [] } = useQuery({ queryKey: ['clients'], queryFn: fetchClients });
+  const { data: clients = [], isLoading: clientsLoading } = useQuery({ queryKey: ['clients'], queryFn: fetchClients });
   const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: fetchSettings });
   const activePartnerName = settings?.activePartnerId || null;
 
@@ -48,6 +48,9 @@ export default function DashboardPage() {
   return (
     <AppShell>
       <div className="space-y-6">
+        {clientsLoading && (
+          <Card><CardContent className="py-12 text-center text-slate-400">Cargando datos...</CardContent></Card>
+        )}
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
           {stats.map((stat) => (
             <Card key={stat.label}>

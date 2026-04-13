@@ -113,9 +113,10 @@ export interface Partner {
   id: string;
   name: string;
   templateType: string;
+  templateRepo: string;
   description: string;
   active: boolean;
-  clientCount: number;
+  clientCount?: number;
   createdAt: string;
 }
 
