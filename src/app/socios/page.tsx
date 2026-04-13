@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import {
   Handshake,
@@ -31,9 +31,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import AppShell from '@/components/app-shell';
-import { fetchPartners, fetchSettings, updateSettings, createPartner, updatePartner, deletePartnerAPI, fetchClients } from '@/lib/api';
 import { Client, Partner } from '@/types';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 function parseGitHubRepo(url: string) {
   const match = url.match(/github\.com\/([^/]+\/[^/]+?)(?:\/)?$/);
@@ -41,12 +39,10 @@ function parseGitHubRepo(url: string) {
 }
 
 export default function SociosPage() {
-  const queryClient = useQueryClient();
-  const { data: partners = [], isLoading } = useQuery({ queryKey: ['partners'], queryFn: fetchPartners });
-  const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: fetchSettings });
-  const { data: clients = [] } = useQuery({ queryKey: ['clients'], queryFn: fetchClients });
-
-  const activePartnerId = settings?.activePartnerId || null;
+  const [partners, setPartners] = useState<Partner[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
+  const [activePartnerId, setActivePartnerId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
   const [expandedPartner, setExpandedPartner] = useState<string | null>(null);
 
   // Create dialog
@@ -68,6 +64,22 @@ export default function SociosPage() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deletePartner, setDeletePartner] = useState<Partner | null>(null);
 
+  const loadData = () => {
+    setLoading(true);
+    Promise.all([
+      fetch('/api/partners').then(r => r.json()),
+      fetch('/api/clients').then(r => r.json()),
+      fetch('/api/settings').then(r => r.json()),
+    ]).then(([partnersData, clientsData, settingsData]) => {
+      setPartners(partnersData);
+      setClients(clientsData);
+      setActivePartnerId(settingsData.activePartnerId || null);
+      setLoading(false);
+    }).catch(() => { setLoading(false); });
+  };
+
+  useEffect(() => { loadData(); }, []);
+
   const openEditDialog = (partner: Partner) => {
     setEditPartner(partner);
     setEditName(partner.name);
@@ -82,52 +94,51 @@ export default function SociosPage() {
     setDeleteOpen(true);
   };
 
-  const handleSetActive = useMutation({
-    mutationFn: (partnerId: string) => updateSettings({ activePartnerId: partnerId }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['partners'] });
-      queryClient.invalidateQueries({ queryKey: ['settings'] });
-    },
-  });
+  const handleSetActive = async (partnerId: string) => {
+    await fetch('/api/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ activePartnerId: partnerId }),
+    });
+    loadData();
+  };
 
-  const handleCreate = useMutation({
-    mutationFn: () => createPartner({ name: createName, templateType: createTemplate, templateRepo: createRepo, description: createDesc || undefined }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['partners'] });
-      setCreateOpen(false);
-      setCreateName(''); setCreateDesc(''); setCreateRepo(''); setCreateTemplate('generic');
-    },
-  });
+  const handleCreate = async () => {
+    await fetch('/api/partners', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: createName, templateType: createTemplate, templateRepo: createRepo, description: createDesc || undefined }),
+    });
+    setCreateOpen(false);
+    setCreateName(''); setCreateDesc(''); setCreateRepo(''); setCreateTemplate('generic');
+    loadData();
+  };
 
-  const handleEdit = useMutation({
-    mutationFn: () => {
-      if (!editPartner) return Promise.reject();
-      return updatePartner(editPartner.id, { name: editName, templateType: editTemplate, templateRepo: editRepo, description: editDesc });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['partners'] });
-      queryClient.invalidateQueries({ queryKey: ['clients'] });
-      setEditOpen(false);
-    },
-  });
+  const handleEdit = async () => {
+    if (!editPartner) return;
+    await fetch(`/api/partners/${editPartner.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: editName, templateType: editTemplate, templateRepo: editRepo, description: editDesc }),
+    });
+    setEditOpen(false);
+    loadData();
+  };
 
-  const handleDelete = useMutation({
-    mutationFn: () => {
-      if (!deletePartner) return Promise.reject();
-      return deletePartnerAPI(deletePartner.id);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['partners'] });
-      queryClient.invalidateQueries({ queryKey: ['clients'] });
-      setDeleteOpen(false);
-      setDeletePartner(null);
-      // If the deleted partner was active, clear the setting
-      if (deletePartner?.id === activePartnerId) {
-        updateSettings({ activePartnerId: '' }).catch(() => {});
-        queryClient.invalidateQueries({ queryKey: ['settings'] });
-      }
-    },
-  });
+  const handleDelete = async () => {
+    if (!deletePartner) return;
+    await fetch(`/api/partners/${deletePartner.id}`, { method: 'DELETE' });
+    setDeleteOpen(false);
+    setDeletePartner(null);
+    if (deletePartner.id === activePartnerId) {
+      fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ activePartnerId: '' }),
+      }).catch(() => {});
+    }
+    loadData();
+  };
 
   const getClientsForPartner = (partnerId: string): Client[] => {
     return clients.filter((c) => c.partnerId === partnerId);
@@ -145,7 +156,7 @@ export default function SociosPage() {
           </Button>
         </div>
 
-        {isLoading ? (
+        {loading ? (
           <Card><CardContent className="py-12 text-center text-slate-400">Cargando...</CardContent></Card>
         ) : (
           <div className="grid gap-6">
@@ -189,7 +200,7 @@ export default function SociosPage() {
                           </Button>
                         )}
                         {!isActive && (
-                          <Button onClick={() => handleSetActive.mutate(partner.id)} variant="outline" size="sm" className="border-cyan-300 text-cyan-600 hover:bg-cyan-50 gap-1.5">
+                          <Button onClick={() => handleSetActive(partner.id)} variant="outline" size="sm" className="border-cyan-300 text-cyan-600 hover:bg-cyan-50 gap-1.5">
                             <Check className="h-4 w-4" /> Activar
                           </Button>
                         )}
@@ -249,7 +260,7 @@ export default function SociosPage() {
           </div>
         )}
 
-        {partners.length === 0 && (
+        {partners.length === 0 && !loading && (
           <Card>
             <CardContent className="py-12 text-center">
               <Handshake className="h-12 w-12 text-slate-300 mx-auto mb-3" />
@@ -287,7 +298,7 @@ export default function SociosPage() {
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancelar</Button>
-              <Button onClick={() => handleCreate.mutate()} disabled={!createName.trim()} className="bg-cyan-600 hover:bg-cyan-700">
+              <Button onClick={handleCreate} disabled={!createName.trim()} className="bg-cyan-600 hover:bg-cyan-700">
                 Crear Socio
               </Button>
             </DialogFooter>
@@ -321,7 +332,7 @@ export default function SociosPage() {
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setEditOpen(false)}>Cancelar</Button>
-              <Button onClick={() => handleEdit.mutate()} disabled={!editName.trim()} className="bg-cyan-600 hover:bg-cyan-700">
+              <Button onClick={handleEdit} disabled={!editName.trim()} className="bg-cyan-600 hover:bg-cyan-700">
                 Guardar Cambios
               </Button>
             </DialogFooter>
@@ -341,7 +352,7 @@ export default function SociosPage() {
             </DialogHeader>
             <DialogFooter>
               <Button variant="outline" onClick={() => setDeleteOpen(false)}>Cancelar</Button>
-              <Button variant="destructive" onClick={() => handleDelete.mutate()} className="gap-2">
+              <Button variant="destructive" onClick={handleDelete} className="gap-2">
                 <Trash2 className="h-4 w-4" /> Eliminar
               </Button>
             </DialogFooter>

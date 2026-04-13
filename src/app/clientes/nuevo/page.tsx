@@ -1,6 +1,6 @@
 'use client';
 
-import React, { Suspense, useState } from 'react';
+import React, { Suspense, useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
@@ -31,7 +31,6 @@ import {
   EMPTY_SEO_CHECKLIST,
   SEO_CHECKLIST_ITEMS,
 } from '@/types';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 const STEPS = [
   { title: 'Datos del Alumno', icon: UserPlus },
@@ -78,24 +77,55 @@ const initialFormData: FormData = {
 function NuevoClienteContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const queryClient = useQueryClient();
   const [step, setStep] = useState(0);
   const [formData, setFormData] = useState<FormData>(initialFormData);
   const [newZone, setNewZone] = useState('');
   const [newKeyword, setNewKeyword] = useState('');
+  const [settings, setSettings] = useState<{ activePartnerId: string | null } | null>(null);
 
-  const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: fetchSettings });
+  useEffect(() => {
+    fetchSettings()
+      .then((data) => setSettings(data))
+      .catch(() => {});
+  }, []);
 
   const partnerId = searchParams.get('partnerId') || '';
   const partnerInfo = settings?.activePartnerId ? { id: settings.activePartnerId, name: '' } : null;
 
-  const createMutation = useMutation({
-    mutationFn: createClient,
-    onSuccess: (newClient) => {
-      queryClient.invalidateQueries({ queryKey: ['clients'] });
-      router.push(`/clientes/${newClient.id}`);
-    },
-  });
+  const handleSubmit = async () => {
+    const clientData: Omit<Client, 'id' | 'createdAt' | 'updatedAt' | 'partnerName'> = {
+      partnerId: partnerInfo?.id || partnerId,
+      businessName: formData.businessName,
+      contactName: formData.contactName,
+      email: formData.email,
+      phone: formData.phone,
+      location: formData.location,
+      province: formData.province,
+      domain: formData.domain,
+      status: formData.status || 'new',
+      brandPrimaryColor: formData.brandPrimaryColor,
+      brandSecondaryColor: formData.brandSecondaryColor,
+      brandAccentColor: formData.brandAccentColor,
+      logoUrl: formData.logoUrl,
+      heroImageUrl: formData.heroImageUrl,
+      businessType: formData.businessType,
+      services: formData.services,
+      zones: formData.zones,
+      socialLinks: {},
+      seoTitle: formData.seoTitle,
+      seoDescription: formData.seoDescription,
+      seoKeywords: formData.seoKeywords.split(',').map((k) => k.trim()).filter(Boolean),
+      googleSiteVerification: formData.googleSiteVerification,
+      gAnalyticsId: formData.gAnalyticsId,
+      gscVerified: false,
+      onboardingStep: 4,
+      onboardingCompleted: true,
+      seoChecklist: { ...EMPTY_SEO_CHECKLIST },
+      notes: formData.notes,
+    };
+    const newClient = await createClient(clientData);
+    router.push(`/clientes/${newClient.id}`);
+  };
 
   const updateField = (field: keyof FormData, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -150,40 +180,6 @@ function NuevoClienteContent() {
       services[serviceIndex] = service;
       return { ...prev, services };
     });
-  };
-
-  const handleSubmit = () => {
-    const client: Omit<Client, 'id' | 'createdAt' | 'updatedAt' | 'partnerName'> = {
-      partnerId: partnerInfo?.id || partnerId,
-      businessName: formData.businessName,
-      contactName: formData.contactName,
-      email: formData.email,
-      phone: formData.phone,
-      location: formData.location,
-      province: formData.province,
-      domain: formData.domain,
-      status: formData.status || 'new',
-      brandPrimaryColor: formData.brandPrimaryColor,
-      brandSecondaryColor: formData.brandSecondaryColor,
-      brandAccentColor: formData.brandAccentColor,
-      logoUrl: formData.logoUrl,
-      heroImageUrl: formData.heroImageUrl,
-      businessType: formData.businessType,
-      services: formData.services,
-      zones: formData.zones,
-      socialLinks: {},
-      seoTitle: formData.seoTitle,
-      seoDescription: formData.seoDescription,
-      seoKeywords: formData.seoKeywords.split(',').map((k) => k.trim()).filter(Boolean),
-      googleSiteVerification: formData.googleSiteVerification,
-      gAnalyticsId: formData.gAnalyticsId,
-      gscVerified: false,
-      onboardingStep: 4,
-      onboardingCompleted: true,
-      seoChecklist: { ...EMPTY_SEO_CHECKLIST },
-      notes: formData.notes,
-    };
-    createMutation.mutate(client);
   };
 
   const canProceed = () => {

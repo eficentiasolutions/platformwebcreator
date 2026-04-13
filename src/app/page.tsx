@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import {
   Users,
@@ -15,15 +15,28 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/status-badge';
 import AppShell from '@/components/app-shell';
-import { fetchClients, fetchSettings } from '@/lib/api';
 import { Client, ClientStatus } from '@/types';
 import { cn } from '@/lib/utils';
-import { useQuery } from '@tanstack/react-query';
 
 export default function DashboardPage() {
-  const { data: clients = [], isLoading: clientsLoading } = useQuery({ queryKey: ['clients'], queryFn: fetchClients });
-  const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: fetchSettings });
-  const activePartnerName = settings?.activePartnerId || null;
+  const [clients, setClients] = useState<Client[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([
+      fetch('/api/clients').then(r => r.json()),
+      fetch('/api/settings').then(r => r.json()),
+    ]).then(([clientsData]) => {
+      if (!cancelled) {
+        setClients(clientsData);
+        setLoading(false);
+      }
+    }).catch(() => {
+      if (!cancelled) setLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, []);
 
   const total = clients.length;
   const published = clients.filter((c) => c.status === 'published').length;
@@ -48,7 +61,7 @@ export default function DashboardPage() {
   return (
     <AppShell>
       <div className="space-y-6">
-        {clientsLoading && (
+        {loading && (
           <Card><CardContent className="py-12 text-center text-slate-400">Cargando datos...</CardContent></Card>
         )}
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">

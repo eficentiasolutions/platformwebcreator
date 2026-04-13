@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import {
   Plus,
@@ -26,31 +26,37 @@ import {
 } from '@/components/ui/dialog';
 import { StatusBadge } from '@/components/status-badge';
 import AppShell from '@/components/app-shell';
-import { fetchClients, deleteClientAPI, fetchSettings } from '@/lib/api';
 import { Client, ClientStatus, STATUS_LABELS } from '@/types';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 const ALL_STATUSES: ClientStatus[] = [
   'new', 'configuring', 'seo_setup', 'branding', 'content', 'review', 'published', 'maintenance',
 ];
 
 export default function ClientesPage() {
-  const queryClient = useQueryClient();
-  const { data: clients = [], isLoading: clientsLoading } = useQuery({ queryKey: ['clients'], queryFn: fetchClients });
-  const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: fetchSettings });
+  const [clients, setClients] = useState<Client[]>([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [clientToDelete, setClientToDelete] = useState<Client | null>(null);
 
-  const activePartnerName = settings?.activePartnerId || null;
+  const loadClients = () => {
+    setLoading(true);
+    fetch('/api/clients')
+      .then(r => r.json())
+      .then(data => { setClients(data); setLoading(false); })
+      .catch(() => { setLoading(false); });
+  };
 
-  const deleteMutation = useMutation({
-    mutationFn: deleteClientAPI,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['clients'] });
-    },
-  });
+  useEffect(() => { loadClients(); }, []);
+
+  const handleDelete = async () => {
+    if (!clientToDelete) return;
+    await fetch(`/api/clients/${clientToDelete.id}`, { method: 'DELETE' });
+    setDeleteDialogOpen(false);
+    setClientToDelete(null);
+    loadClients();
+  };
 
   const filteredClients = clients.filter((client) => {
     const matchesSearch =
@@ -62,31 +68,19 @@ export default function ClientesPage() {
     return matchesSearch && matchesStatus;
   });
 
-  const handleDelete = async () => {
-    if (!clientToDelete) return;
-    await deleteMutation.mutateAsync(clientToDelete.id);
-    setDeleteDialogOpen(false);
-    setClientToDelete(null);
-  };
-
   return (
     <AppShell>
       <div className="space-y-6">
-        {clientsLoading && (
-          <Card><CardContent className="py-12 text-center text-slate-400">Cargando clientes...</CardContent></Card>
-        )}
         <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-          <div>
-            {activePartnerName && (
-              <p className="text-sm text-slate-500">
-                Mostrando clientes de <span className="font-medium text-slate-700">{activePartnerName}</span>
-              </p>
-            )}
-          </div>
+          <div />
           <Link href="/clientes/nuevo">
             <Button className="bg-cyan-600 hover:bg-cyan-700 gap-2"><Plus className="h-4 w-4" /> Nuevo Cliente</Button>
           </Link>
         </div>
+
+        {loading && (
+          <Card><CardContent className="py-12 text-center text-slate-400">Cargando clientes...</CardContent></Card>
+        )}
 
         <Card>
           <CardContent className="p-4">

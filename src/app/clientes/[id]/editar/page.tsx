@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, use } from 'react';
+import React, { useState, useEffect, use } from 'react';
 import Link from 'next/link';
 import {
   ArrowLeft,
@@ -32,7 +32,6 @@ import {
 import AppShell from '@/components/app-shell';
 import { fetchClient, updateClient } from '@/lib/api';
 import { Client, ClientStatus, STATUS_LABELS, ServiceItem } from '@/types';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 export default function EditarClientePage({
   params,
@@ -40,23 +39,26 @@ export default function EditarClientePage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
-  const queryClient = useQueryClient();
-  const { data: client, isLoading } = useQuery({
-    queryKey: ['clients', id],
-    queryFn: () => fetchClient(id),
-  });
+  const [client, setClient] = useState<Client | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [saved, setSaved] = useState(false);
   const [newZone, setNewZone] = useState('');
   const [serviceInputs, setServiceInputs] = useState<Record<number, string>>({});
 
-  const saveMutation = useMutation({
-    mutationFn: (data: Partial<Client>) => updateClient(id, data),
-    onSuccess: () => {
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
-      queryClient.invalidateQueries({ queryKey: ['clients', id] });
-    },
-  });
+  const reloadClient = () => {
+    fetchClient(id)
+      .then((data) => {
+        setClient(data);
+        setIsLoading(false);
+      })
+      .catch(() => {
+        setIsLoading(false);
+      });
+  };
+
+  useEffect(() => {
+    reloadClient();
+  }, [id]);
 
   if (isLoading) {
     return (
@@ -145,8 +147,11 @@ export default function EditarClientePage({
     setLocalClient({ ...localClient, zones: localClient.zones.filter((_, i) => i !== index) });
   };
 
-  const handleSave = () => {
-    saveMutation.mutate({ ...localClient, updatedAt: new Date().toISOString() });
+  const handleSave = async () => {
+    await updateClient(id, { ...localClient, updatedAt: new Date().toISOString() });
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+    reloadClient();
   };
 
   return (

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, use } from 'react';
+import React, { useState, useEffect, use } from 'react';
 import Link from 'next/link';
 import {
   ArrowLeft,
@@ -30,7 +30,6 @@ import AppShell from '@/components/app-shell';
 import { fetchClient, updateClientSEO } from '@/lib/api';
 import { getSEOProgress } from '@/lib/utils';
 import { Client, SEO_CHECKLIST_ITEMS, SEOChecklist } from '@/types';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 const ICON_MAP: Record<string, React.ElementType> = {
   Settings,
@@ -47,34 +46,23 @@ export default function SEOChecklistPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
-  const queryClient = useQueryClient();
-  const { data: client, isLoading } = useQuery({
-    queryKey: ['clients', id],
-    queryFn: () => fetchClient(id),
-  });
+  const [client, setClient] = useState<Client | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const toggleMutation = useMutation({
-    mutationFn: (key: keyof SEOChecklist) => updateClientSEO(id, { [key]: !client!.seoChecklist[key] }),
-    onMutate: async (key) => {
-      await queryClient.cancelQueries({ queryKey: ['clients', id] });
-      const previous = queryClient.getQueryData<Client>(['clients', id]);
-      if (previous) {
-        queryClient.setQueryData<Client>(['clients', id], {
-          ...previous,
-          seoChecklist: { ...previous.seoChecklist, [key]: !previous.seoChecklist[key] },
-        });
-      }
-      return { previous };
-    },
-    onError: (_err, _key, context) => {
-      if (context?.previous) {
-        queryClient.setQueryData(['clients', id], context.previous);
-      }
-    },
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ['clients', id] });
-    },
-  });
+  const reloadClient = () => {
+    fetchClient(id)
+      .then((data) => {
+        setClient(data);
+        setIsLoading(false);
+      })
+      .catch(() => {
+        setIsLoading(false);
+      });
+  };
+
+  useEffect(() => {
+    reloadClient();
+  }, [id]);
 
   if (isLoading) {
     return (
@@ -103,8 +91,20 @@ export default function SEOChecklistPage({
   const totalChecks = Object.keys(client.seoChecklist).length;
   const completedChecks = Object.values(client.seoChecklist).filter(Boolean).length;
 
-  const handleToggle = (key: keyof SEOChecklist) => {
-    toggleMutation.mutate(key);
+  const handleToggle = async (key: keyof SEOChecklist) => {
+    if (!client) return;
+    // Optimistic update
+    const previous = client;
+    setClient({
+      ...client,
+      seoChecklist: { ...client.seoChecklist, [key]: !client.seoChecklist[key] },
+    });
+    try {
+      await updateClientSEO(id, { [key]: !previous.seoChecklist[key] });
+    } catch {
+      setClient(previous);
+    }
+    reloadClient();
   };
 
   return (

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -13,8 +13,7 @@ import {
   Menu,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { fetchSettings, fetchPartners } from '@/lib/api';
-import { useQuery } from '@tanstack/react-query';
+import { Partner } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -85,11 +84,19 @@ function CollapsedNav({ pathname }: { pathname: string }) {
 
 export function AppSidebar() {
   const pathname = usePathname();
-  const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: fetchSettings });
-  const { data: partners = [] } = useQuery({ queryKey: ['partners'], queryFn: fetchPartners });
-  const activePartnerName = partners.find((p) => p.id === settings?.activePartnerId)?.name ?? null;
+  const [activePartnerName, setActivePartnerName] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  useEffect(() => {
+    Promise.all([
+      fetch('/api/settings').then(r => r.json()),
+      fetch('/api/partners').then(r => r.json()),
+    ]).then(([settings, partners]) => {
+      const partner = (partners as Partner[]).find((p) => p.id === settings.activePartnerId);
+      setActivePartnerName(partner?.name ?? null);
+    }).catch(() => {});
+  }, [pathname]);
 
   return (
     <>

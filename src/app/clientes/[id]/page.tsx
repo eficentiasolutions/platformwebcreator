@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, use } from 'react';
+import React, { useState, useEffect, use } from 'react';
 import Link from 'next/link';
 import {
   ArrowLeft,
@@ -32,7 +32,6 @@ import AppShell from '@/components/app-shell';
 import { fetchClient, updateClient, updateClientSEO } from '@/lib/api';
 import { getSEOProgress } from '@/lib/utils';
 import { Client, SEOChecklist, SEO_CHECKLIST_ITEMS } from '@/types';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 export default function ClientDetailPage({
   params,
@@ -40,29 +39,38 @@ export default function ClientDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
-  const queryClient = useQueryClient();
-  const { data: client, isLoading } = useQuery({
-    queryKey: ['clients', id],
-    queryFn: () => fetchClient(id),
-  });
+  const [client, setClient] = useState<Client | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [notes, setNotes] = useState('');
   const [notesSaved, setNotesSaved] = useState(false);
 
-  const saveNotesMutation = useMutation({
-    mutationFn: (notesValue: string) => updateClient(id, { notes: notesValue }),
-    onSuccess: () => {
-      setNotesSaved(true);
-      setTimeout(() => setNotesSaved(false), 2000);
-      queryClient.invalidateQueries({ queryKey: ['clients', id] });
-    },
-  });
+  const reloadClient = () => {
+    fetchClient(id)
+      .then((data) => {
+        setClient(data);
+        setIsLoading(false);
+      })
+      .catch(() => {
+        setIsLoading(false);
+      });
+  };
 
-  const toggleCheckMutation = useMutation({
-    mutationFn: (key: keyof SEOChecklist) => updateClientSEO(id, { [key]: !client!.seoChecklist[key] }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['clients', id] });
-    },
-  });
+  useEffect(() => {
+    reloadClient();
+  }, [id]);
+
+  const handleSaveNotes = async () => {
+    await updateClient(id, { notes });
+    setNotesSaved(true);
+    setTimeout(() => setNotesSaved(false), 2000);
+    reloadClient();
+  };
+
+  const handleToggleCheck = async (key: keyof SEOChecklist) => {
+    if (!client) return;
+    await updateClientSEO(id, { [key]: !client.seoChecklist[key] });
+    reloadClient();
+  };
 
   if (isLoading) {
     return (
@@ -90,14 +98,6 @@ export default function ClientDetailPage({
   const seoProgress = getSEOProgress(client.seoChecklist);
   const totalChecks = Object.keys(client.seoChecklist).length;
   const completedChecks = Object.values(client.seoChecklist).filter(Boolean).length;
-
-  const handleSaveNotes = () => {
-    saveNotesMutation.mutate(notes);
-  };
-
-  const handleToggleCheck = (key: keyof SEOChecklist) => {
-    toggleCheckMutation.mutate(key);
-  };
 
   const infoItems = [
     { icon: Globe, label: 'Dominio', value: client.domain || '—' },
