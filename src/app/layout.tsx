@@ -14,6 +14,8 @@ const geistMono = Geist_Mono({
   subsets: ['latin'],
 });
 
+export const revalidate = 0;
+
 export const metadata: Metadata = {
   title: 'Eficentia Solutions | Plataforma de Gestion SEO',
   description: 'Plataforma centralizada para gestion de clientes, onboarding, branding y SEO de sitios web.',
